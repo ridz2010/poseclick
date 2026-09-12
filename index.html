@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PoseClick 📸</title>
+
+<style>
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0;
+}
+
+body{
+  font-family:Arial,sans-serif;
+  background:#111;
+  color:white;
+  min-height:100vh;
+  text-align:center;
+}
+
+header{
+  padding:18px;
+  background:#1d1d1d;
+  font-size:25px;
+  font-weight:bold;
+}
+
+.container{
+  max-width:600px;
+  margin:auto;
+  padding:15px;
+}
+
+.camera-box{
+  position:relative;
+  width:100%;
+  aspect-ratio:3/4;
+  background:#222;
+  border-radius:20px;
+  overflow:hidden;
+  margin:15px 0;
+}
+
+video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+canvas{
+  display:none;
+}
+
+.message{
+  position:absolute;
+  inset:0;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:25px;
+  color:#ccc;
+  font-size:15px;
+}
+
+.controls{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+button{
+  border:none;
+  border-radius:12px;
+  padding:13px 18px;
+  background:#fff;
+  color:#111;
+  font-size:15px;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+button:active{
+  transform:scale(.96);
+}
+
+.capture{
+  background:#ff4f81;
+  color:white;
+  font-size:18px;
+  padding:16px 28px;
+}
+
+.pose{
+  margin:18px 0;
+  padding:18px;
+  border-radius:16px;
+  background:#1e1e1e;
+}
+
+.pose h2{
+  margin-bottom:8px;
+}
+
+#timer{
+  font-size:60px;
+  font-weight:bold;
+  display:none;
+  position:absolute;
+  inset:0;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.35);
+  z-index:5;
+}
+
+.gallery{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+  margin-top:15px;
+}
+
+.gallery img{
+  width:100%;
+  border-radius:12px;
+}
+
+.hidden{
+  display:none;
+}
+
+.error{
+  color:#ff8da9;
+  margin-top:10px;
+  line-height:1.5;
+}
+</style>
+</head>
+
+<body>
+
+<header>📸 PoseClick</header>
+
+<div class="container">
+
+  <div class="pose">
+    <h2 id="poseTitle">✨ Ready?</h2>
+    <p id="poseText">Tap “Start Camera” to begin.</p>
+  </div>
+
+  <div class="camera-box">
+
+    <video id="video" autoplay playsinline muted></video>
+
+    <div id="message" class="message">
+      Camera is not started yet.
+    </div>
+
+    <div id="timer">3</div>
+
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <div class="controls">
+
+    <button onclick="startCamera()">
+      📷 Start Camera
+    </button>
+
+    <button onclick="flipCamera()">
+      🔄 Flip
+    </button>
+
+    <button onclick="newPose()">
+      ✨ New Pose
+    </button>
+
+    <button onclick="takePhoto()" class="capture">
+      📸 Capture
+    </button>
+
+  </div>
+
+  <p id="error" class="error"></p>
+
+  <h2 style="margin-top:25px;">🖼️ Gallery</h2>
+
+  <div id="gallery" class="gallery"></div>
+
+</div>
+
+<script>
+
+let stream = null;
+let facingMode = "user";
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const message = document.getElementById("message");
+const timer = document.getElementById("timer");
+const errorBox = document.getElementById("error");
+const gallery = document.getElementById("gallery");
+
+const poses = [
+
+  ["😊 Smile", "Give a natural smile and look at the camera."],
+
+  ["🌸 Soft Pose", "Turn your face slightly and keep a relaxed expression."],
+
+  ["✨ Chin Up", "Lift your chin a little and look confidently at the camera."],
+
+  ["🌟 Look Away", "Look slightly away from the camera for a candid shot."],
+
+  ["💫 Hair Pose", "Gently adjust your hair and smile naturally."],
+
+  ["🫶 Hand Pose", "Place one hand near your face and keep the pose comfortable."],
+
+  ["😎 Cool Pose", "Keep a relaxed expression and look confident."],
+
+  ["🌙 Side Pose", "Turn slightly sideways and look toward the camera."],
+
+  ["🌷 Cute Smile", "Give a small natural smile."],
+
+  ["📖 Candid", "Pretend you're reading something and look away from the camera."],
+
+  ["☀️ Sunshine", "Face the camera with a bright, natural smile."],
+
+  ["⭐ Star Pose", "Stand comfortably and give your best confident look."]
+
+];
+
+function newPose(){
+
+  const random = poses[Math.floor(Math.random() * poses.length)];
+
+  document.getElementById("poseTitle").textContent = random[0];
+  document.getElementById("poseText").textContent = random[1];
+
+}
+
+async function startCamera(){
+
+  errorBox.textContent = "";
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+
+    errorBox.textContent =
+      "Camera is not supported here. Please open this page in Chrome using the HTTPS GitHub Pages link.";
+
+    return;
+  }
+
+  try{
+
+    if(stream){
+
+      stream.getTracks().forEach(track => track.stop());
+
+    }
+
+    stream = await navigator.mediaDevices.getUserMedia({
+
+      video:{
+        facingMode:facingMode,
+        width:{ideal:1080},
+        height:{ideal:1440}
+      },
+
+      audio:false
+
+    });
+
+    video.srcObject = stream;
+
+    await video.play();
+
+    message.style.display = "none";
+
+  }catch(error){
+
+    console.log(error);
+
+    errorBox.textContent =
+      "Camera permission was blocked. Please allow Camera permission in Chrome and reload the page.";
+
+  }
+
+}
+
+async function flipCamera(){
+
+  facingMode = facingMode === "user"
+    ? "environment"
+    : "user";
+
+  await startCamera();
+
+}
+
+function countdown(){
+
+  return new Promise(resolve => {
+
+    let count = 3;
+
+    timer.textContent = count;
+    timer.style.display = "flex";
+
+    const interval = setInterval(() => {
+
+      count--;
+
+      if(count <= 0){
+
+        clearInterval(interval);
+        timer.style.display = "none";
+        resolve();
+
+      }else{
+
+        timer.textContent = count;
+
+      }
+
+    },1000);
+
+  });
+
+}
+
+async function takePhoto(){
+
+  if(!stream){
+
+    await startCamera();
+
+    if(!stream) return;
+
+  }
+
+  await countdown();
+
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+
+  if(!width || !height){
+
+    errorBox.textContent =
+      "Camera is still starting. Please try again.";
+
+    return;
+
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+
+  if(facingMode === "user"){
+
+    ctx.translate(width,0);
+    ctx.scale(-1,1);
+
+  }
+
+  ctx.drawImage(video,0,0,width,height);
+
+  const image = canvas.toDataURL("image/jpeg",0.92);
+
+  addToGallery(image);
+
+}
+
+function addToGallery(image){
+
+  const wrapper = document.createElement("div");
+
+  const img = document.createElement("img");
+
+  img.src = image;
+
+  img.onclick = () => {
+
+    const link = document.createElement("a");
+
+    link.href = image;
+    link.download = "PoseClick-" + Date.now() + ".jpg";
+
+    link.click();
+
+  };
+
+  wrapper.appendChild(img);
+
+  gallery.prepend(wrapper);
+
+}
+
+newPose();
+
+</script>
+
+</body>
+</html>
